@@ -60,16 +60,12 @@ fn solve_part1(data: &Data) -> i64 {
 fn solve_part2(data: &Data) -> i64 {
     let mut frequencies = data.current_frequencies.clone();
     for swaps in data.swap_instructions.windows(2) {
-        perform_swap(&mut frequencies, swaps[0]);
-        perform_swap(&mut frequencies, (swaps[0].0, swaps[1].0));
+        perform_threeway_swap(&mut frequencies, swaps[0], swaps[1]);
     }
-    perform_swap(&mut frequencies, *data.swap_instructions.last().unwrap());
-    perform_swap(
+    perform_threeway_swap(
         &mut frequencies,
-        (
-            data.swap_instructions.last().unwrap().0,
-            data.swap_instructions[0].0,
-        ),
+        *data.swap_instructions.last().unwrap(),
+        data.swap_instructions[0],
     );
     frequencies[data.test_index - 1]
 }
@@ -88,4 +84,9 @@ fn solve_part3(data: &Data) -> i64 {
 
 fn perform_swap(frequencies: &mut [i64], swap: (usize, usize)) {
     frequencies.swap(swap.0 - 1, swap.1 - 1);
+}
+
+fn perform_threeway_swap(frequencies: &mut [i64], swap1: (usize, usize), swap2: (usize, usize)) {
+    perform_swap(frequencies, swap1);
+    perform_swap(frequencies, (swap1.0, swap2.0));
 }
