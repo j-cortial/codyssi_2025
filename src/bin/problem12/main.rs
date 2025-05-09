@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 fn main() {
     let input = parse_input(include_str!("input.txt"));
     println!(
@@ -25,13 +27,14 @@ struct Grid {
     data: Vec<Amplitude>,
 }
 
+#[derive(Clone, Copy)]
 enum Domain {
     All,
     Row(usize),
     Col(usize),
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy)]
 enum Operator {
     Shift(usize),
     Add(Amplitude),
@@ -39,15 +42,16 @@ enum Operator {
     Mul(Amplitude),
 }
 
+#[derive(Clone, Copy)]
 struct Instruction {
     operator: Operator,
     domain: Domain,
 }
 
+#[derive(Clone, Copy)]
 enum Control {
     Act,
     Cycle,
-    Take,
 }
 
 impl Grid {
@@ -158,6 +162,18 @@ impl Grid {
     }
 }
 
+fn highest_amplitude_sum(grid: &Grid) -> Amplitude {
+    let highest_row_amplitude: Amplitude = (0..grid.row_count)
+        .map(|i| grid.row(i).sum())
+        .max()
+        .unwrap();
+    let highest_col_amplitude = (0..grid.col_count)
+        .map(|j| grid.col(j).sum())
+        .max()
+        .unwrap();
+    highest_row_amplitude.max(highest_col_amplitude)
+}
+
 struct Data {
     grid: Grid,
     instructions: Vec<Instruction>,
@@ -222,10 +238,11 @@ fn parse_input(input: &str) -> Data {
     let control = if let Some(section) = sections.next() {
         section
             .lines()
+            .skip(1)
+            .step_by(2)
             .map(|line| match line {
                 "ACT" => Control::Act,
                 "CYCLE" => Control::Cycle,
-                "TAKE" => Control::Take,
                 _ => panic!(),
             })
             .collect()
@@ -247,19 +264,23 @@ fn solve_part1(data: &Data) -> Amplitude {
         grid.apply(instruction);
     }
 
-    let highest_row_amplitude: Amplitude = (0..grid.row_count)
-        .map(|i| grid.row(i).sum())
-        .max()
-        .unwrap();
-    let highest_col_amplitude = (0..grid.col_count)
-        .map(|j| grid.col(j).sum())
-        .max()
-        .unwrap();
-    highest_row_amplitude.max(highest_col_amplitude)
+    highest_amplitude_sum(&grid)
 }
 
-fn solve_part2(data: &Data) -> i64 {
-    0
+fn solve_part2(data: &Data) -> Amplitude {
+    let mut grid = data.grid.clone();
+
+    let mut instructions: VecDeque<_> = data.instructions.iter().copied().collect();
+
+    for &action in data.control.iter() {
+        let instruction = instructions.pop_front().unwrap();
+        match action {
+            Control::Act => grid.apply(&instruction),
+            Control::Cycle => instructions.push_back(instruction),
+        }
+    }
+
+    highest_amplitude_sum(&grid)
 }
 
 fn solve_part3(data: &Data) -> i64 {
