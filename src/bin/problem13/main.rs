@@ -76,7 +76,7 @@ fn solve_part1(data: &Data) -> Length {
     path_lengths.into_iter().rev().take(3).product()
 }
 
-#[derive(PartialEq, Eq, Ord)]
+#[derive(Clone, PartialEq, Eq, Ord)]
 struct Candidate {
     location: Location,
     distance: Length,
@@ -123,6 +123,39 @@ fn solve_part2(data: &Data) -> Length {
     path_lengths.into_iter().rev().take(3).product()
 }
 
+fn longest_cycle(graph: &[Edge], current_path: &[Candidate]) -> Length {
+    match current_path.last() {
+        None => 0,
+        Some(end) => match current_path
+            .iter()
+            .rev()
+            .skip(1)
+            .find(|x| x.location == end.location)
+        {
+            Some(begin) => end.distance - begin.distance,
+            None => graph
+                .iter()
+                .filter(|edge| edge.begin == end.location)
+                .map(|edge| {
+                    let mut candidate_path = current_path.to_vec();
+                    candidate_path.push(Candidate {
+                        location: edge.end,
+                        distance: end.distance + edge.length,
+                    });
+                    longest_cycle(graph, &candidate_path)
+                })
+                .max()
+                .unwrap_or_default(),
+        },
+    }
+}
+
 fn solve_part3(data: &Data) -> Length {
-    0
+    longest_cycle(
+        data,
+        &[Candidate {
+            location: START,
+            distance: 0,
+        }],
+    )
 }
