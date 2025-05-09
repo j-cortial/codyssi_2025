@@ -283,6 +283,19 @@ fn solve_part2(data: &Data) -> Amplitude {
     highest_amplitude_sum(&grid)
 }
 
-fn solve_part3(data: &Data) -> i64 {
-    0
+fn solve_part3(data: &Data) -> Amplitude {
+    let mut grid = data.grid.clone();
+
+    let mut instructions: VecDeque<_> = data.instructions.iter().copied().collect();
+
+    let mut actions = data.control.iter().copied().cycle();
+
+    while let Some(instruction) = instructions.pop_front() {
+        match actions.next().unwrap() {
+            Control::Act => grid.apply(&instruction),
+            Control::Cycle => instructions.push_back(instruction),
+        }
+    }
+
+    highest_amplitude_sum(&grid)
 }
