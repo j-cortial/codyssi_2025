@@ -135,6 +135,41 @@ fn solve_part2(data: &Data) -> String {
     result
 }
 
-fn solve_part3(data: &Data) -> i64 {
-    0
+fn solve_part3(data: &Data) -> &'static str {
+    let tree = make_tree(data.0.iter().copied());
+
+    let ancestors: Vec<_> = data
+        .1
+        .iter()
+        .map(|artifact| {
+            let mut result = vec![tree.value.name];
+
+            let mut node = &tree;
+            loop {
+                let subtree = if node.value.id < artifact.id {
+                    &node.left
+                } else {
+                    &node.right
+                };
+                match subtree {
+                    Some(next_node) => {
+                        result.push(next_node.value.name);
+                        node = next_node;
+                    }
+                    None => break,
+                }
+            }
+
+            result
+        })
+        .collect();
+
+    ancestors[0]
+        .iter()
+        .copied()
+        .zip(ancestors[1].iter().copied())
+        .take_while(|(a, b)| a == b)
+        .last()
+        .unwrap()
+        .0
 }
