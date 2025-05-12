@@ -62,12 +62,11 @@ impl TreeNode {
     }
 }
 
-fn solve_part1(data: &Data) -> Id {
-    let mut artifacts = data.0.iter().copied();
-    let mut tree = TreeNode::new(artifacts.next().unwrap());
+fn make_tree(mut artifacts: impl Iterator<Item = Artifact>) -> TreeNode {
+    let mut result = TreeNode::new(artifacts.next().unwrap());
 
     while let Some(artifact) = artifacts.next() {
-        let mut node = &mut tree;
+        let mut node = &mut result;
         loop {
             let subtree = if node.value.id < artifact.id {
                 &mut node.left
@@ -85,6 +84,12 @@ fn solve_part1(data: &Data) -> Id {
             }
         }
     }
+
+    result
+}
+
+fn solve_part1(data: &Data) -> Id {
+    let tree = make_tree(data.0.iter().copied());
 
     let mut layer = vec![&tree];
     let mut layer_count = 0;
@@ -104,8 +109,30 @@ fn solve_part1(data: &Data) -> Id {
     max_layer_value * layer_count
 }
 
-fn solve_part2(data: &Data) -> i64 {
-    0
+fn solve_part2(data: &Data) -> String {
+    let tree = make_tree(data.0.iter().copied());
+
+    const ID: Id = 500000;
+
+    let mut node = &tree;
+    let mut result = node.value.name.to_owned();
+
+    loop {
+        let subtree = if node.value.id < ID {
+            &node.left
+        } else {
+            &node.right
+        };
+        match subtree {
+            Some(next_node) => {
+                result += &format!("-{}", next_node.value.name);
+                node = next_node;
+            }
+            None => break,
+        }
+    }
+
+    result
 }
 
 fn solve_part3(data: &Data) -> i64 {
