@@ -303,6 +303,42 @@ impl<const SIZE: usize> Die<SIZE> {
         grid.apply(&action);
     }
 
+    fn apply_with_wrap(&mut self, instruction: &Instruction) {
+        let (faces, fixup) = match instruction.locus {
+            Locus::Face => (vec![Position::Front], false),
+            Locus::Row(_) => (
+                vec![
+                    Position::Front,
+                    Position::Right,
+                    Position::Back,
+                    Position::Left,
+                ],
+                true,
+            ),
+            Locus::Col(_) => (
+                vec![
+                    Position::Front,
+                    Position::Down,
+                    Position::Back,
+                    Position::Up,
+                ],
+                false,
+            ),
+        };
+        if fixup {
+            self.orientations[Position::Back as usize].turn_upside_down();
+        }
+        for face in faces {
+            let index = face as usize;
+            let action = Action::new(instruction, self.orientations[index]);
+            let grid = &mut self.values[index];
+            grid.apply(&action);
+        }
+        if fixup {
+            self.orientations[Position::Back as usize].turn_upside_down();
+        }
+    }
+
     fn rotate(&mut self, twist: &Twist) {
         match twist {
             Twist::Left => {
@@ -363,6 +399,19 @@ fn solve_part2(data: &Data) -> u128 {
         .product()
 }
 
-fn solve_part3(data: &Data) -> i64 {
-    0
+fn solve_part3(data: &Data) -> u128 {
+    let mut die = Die::<80>::new();
+
+    let mut instructions = data.instructions.iter();
+    die.apply(instructions.next().unwrap());
+
+    for (instruction, twist) in instructions.zip(data.twists.iter()) {
+        die.rotate(twist);
+        die.apply_with_wrap(instruction);
+    }
+
+    die.values
+        .iter()
+        .map(|face| face.dominant_sum() as u128)
+        .product()
 }
