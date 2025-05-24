@@ -1,3 +1,5 @@
+use std::collections::{BTreeSet, HashMap, HashSet, hash_map};
+
 fn main() {
     let input = parse_input(include_str!("input.txt"));
     println!(
@@ -110,8 +112,125 @@ fn solve_part1(data: &Data) -> PathCount {
     )
 }
 
-fn solve_part2(data: &Data) -> i64 {
-    0
+fn steps_to_explore(staircases: &[Staircase]) -> Vec<(StepRank, StaircaseId)> {
+    let max_step_rank = staircases[0].end - staircases[0].begin;
+
+    let mut res = vec![];
+
+    let mut active_staircases = BTreeSet::<StaircaseId>::new();
+
+    for step_rank in 0..=max_step_rank {
+        let mut next_active_staircases = BTreeSet::new();
+
+        for id in active_staircases.iter().copied().rev() {
+            let s = &staircases[id - 1];
+            if s.end == step_rank {
+                res.push((step_rank, id));
+            } else {
+                next_active_staircases.insert(id);
+            }
+        }
+
+        for id in next_active_staircases.iter().copied() {
+            res.push((step_rank, id));
+        }
+
+        for (id, s) in staircases.iter().enumerate().map(|(id, s)| (id + 1, s)) {
+            if s.begin == step_rank {
+                res.push((step_rank, id));
+                next_active_staircases.insert(id);
+            }
+        }
+
+        active_staircases = next_active_staircases;
+    }
+
+    res
+}
+
+fn return_branches(staircases: &[Staircase]) -> Vec<HashMap<StaircaseId, Vec<StaircaseId>>> {
+    let max_step_rank = staircases[0].end - staircases[0].begin;
+
+    (0..=max_step_rank)
+        .map(|step_rank| {
+            let mut branches = HashMap::new();
+
+            for (id, s) in staircases.iter().enumerate().map(|(idx, s)| (idx + 1, s)) {
+                if s.end == step_rank {
+                    if let Some(return_id) = s.return_staircase {
+                        match branches.entry(return_id) {
+                            hash_map::Entry::Vacant(vacant_entry) => {
+                                vacant_entry.insert_entry(vec![])
+                            }
+                            hash_map::Entry::Occupied(occupied_entry) => occupied_entry,
+                        }
+                        .get_mut()
+                        .push(id);
+                    }
+                }
+            }
+
+            branches
+        })
+        .collect()
+}
+
+fn solve_part2(data: &Data) -> PathCount {
+    let to_explore = steps_to_explore(&data.staircases);
+    let branches = return_branches(&data.staircases);
+
+    let mut memory = HashMap::<(StepRank, StaircaseId), PathCount>::new();
+    memory.insert((0, 1), 1);
+
+    let max_step_size = *data.allowed_moves.iter().max().unwrap();
+
+    for &(step_rank, staircase_id) in to_explore[1..].into_iter() {
+        let mut predecessors = HashSet::new();
+
+        let mut front: HashSet<_> = [(step_rank, staircase_id)].into_iter().collect();
+
+        for step_size in 1..=max_step_size {
+            if front.is_empty() {
+                break;
+            }
+
+            let mut next_front = HashSet::new();
+
+            for (rank, id) in front {
+                let staircase = &data.staircases[id - 1];
+                if staircase.begin != rank {
+                    next_front.insert((rank - 1, id));
+                } else if let Some(feeder_id) = staircase.feeding_staircase {
+                    next_front.insert((rank, feeder_id));
+                }
+
+                for (&candidate, returner_ids) in &branches[rank as usize] {
+                    if candidate == id {
+                        for &returner_id in returner_ids {
+                            next_front.insert((rank, returner_id));
+                        }
+                    }
+                }
+            }
+
+            if data.allowed_moves.contains(&step_size) {
+                for &step in &next_front {
+                    predecessors.insert(step);
+                }
+            }
+
+            front = next_front;
+        }
+
+        let count = predecessors
+            .iter()
+            .map(|predecessor| memory.get(predecessor).unwrap())
+            .sum();
+        memory.insert((step_rank, staircase_id), count);
+    }
+
+    let max_step_rank = data.staircases[0].end - data.staircases[0].begin;
+    *memory.get(&(max_step_rank, 1)).unwrap()
 }
 
 fn solve_part3(data: &Data) -> i64 {
