@@ -1,4 +1,7 @@
-use std::collections::{BTreeSet, HashMap, HashSet, hash_map};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet, hash_map},
+    fmt::Display,
+};
 
 fn main() {
     let input = parse_input(include_str!("input.txt"));
@@ -112,7 +115,28 @@ fn solve_part1(data: &Data) -> PathCount {
     )
 }
 
-fn steps_to_explore(staircases: &[Staircase]) -> Vec<(StepRank, StaircaseId)> {
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+struct Node {
+    staircase_id: StaircaseId,
+    step_rank: StepRank,
+}
+
+impl Node {
+    fn new(staircase_id: StaircaseId, step_rank: StepRank) -> Self {
+        Self {
+            staircase_id,
+            step_rank,
+        }
+    }
+}
+
+impl Display for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "S{}_{}", self.staircase_id, self.step_rank)
+    }
+}
+
+fn nodes_to_explore(staircases: &[Staircase]) -> Vec<Node> {
     let max_step_rank = staircases[0].end - staircases[0].begin;
 
     let mut res = vec![];
@@ -125,19 +149,19 @@ fn steps_to_explore(staircases: &[Staircase]) -> Vec<(StepRank, StaircaseId)> {
         for id in active_staircases.iter().copied().rev() {
             let s = &staircases[id - 1];
             if s.end == step_rank {
-                res.push((step_rank, id));
+                res.push(Node::new(id, step_rank));
             } else {
                 next_active_staircases.insert(id);
             }
         }
 
         for id in next_active_staircases.iter().copied() {
-            res.push((step_rank, id));
+            res.push(Node::new(id, step_rank));
         }
 
         for (id, s) in staircases.iter().enumerate().map(|(id, s)| (id + 1, s)) {
             if s.begin == step_rank {
-                res.push((step_rank, id));
+                res.push(Node::new(id, step_rank));
                 next_active_staircases.insert(id);
             }
         }
@@ -148,7 +172,7 @@ fn steps_to_explore(staircases: &[Staircase]) -> Vec<(StepRank, StaircaseId)> {
     res
 }
 
-fn return_branches(staircases: &[Staircase]) -> Vec<HashMap<StaircaseId, Vec<StaircaseId>>> {
+fn feeding_branches(staircases: &[Staircase]) -> Vec<HashMap<StaircaseId, Vec<StaircaseId>>> {
     let max_step_rank = staircases[0].end - staircases[0].begin;
 
     (0..=max_step_rank)
@@ -156,8 +180,8 @@ fn return_branches(staircases: &[Staircase]) -> Vec<HashMap<StaircaseId, Vec<Sta
             let mut branches = HashMap::new();
 
             for (id, s) in staircases.iter().enumerate().map(|(idx, s)| (idx + 1, s)) {
-                if s.end == step_rank {
-                    if let Some(return_id) = s.return_staircase {
+                if s.begin == step_rank {
+                    if let Some(return_id) = s.feeding_staircase {
                         match branches.entry(return_id) {
                             hash_map::Entry::Vacant(vacant_entry) => {
                                 vacant_entry.insert_entry(vec![])
@@ -175,64 +199,129 @@ fn return_branches(staircases: &[Staircase]) -> Vec<HashMap<StaircaseId, Vec<Sta
         .collect()
 }
 
-fn solve_part2(data: &Data) -> PathCount {
-    let to_explore = steps_to_explore(&data.staircases);
-    let branches = return_branches(&data.staircases);
+fn successors(staircases: &[Staircase], allowed_moves: &[StepCount]) -> HashMap<Node, Vec<Node>> {
+    let branches = feeding_branches(staircases);
+    let max_step_size = *allowed_moves.iter().max().unwrap();
 
-    let mut memory = HashMap::<(StepRank, StaircaseId), PathCount>::new();
-    memory.insert((0, 1), 1);
+    nodes_to_explore(staircases)
+        .into_iter()
+        .rev()
+        .map(|node| {
+            let mut res = BTreeSet::new();
 
-    let max_step_size = *data.allowed_moves.iter().max().unwrap();
+            let mut front: HashSet<_> = [node].into_iter().collect();
 
-    for &(step_rank, staircase_id) in to_explore[1..].into_iter() {
-        let mut predecessors = HashSet::new();
-
-        let mut front: HashSet<_> = [(step_rank, staircase_id)].into_iter().collect();
-
-        for step_size in 1..=max_step_size {
-            if front.is_empty() {
-                break;
-            }
-
-            let mut next_front = HashSet::new();
-
-            for (rank, id) in front {
-                let staircase = &data.staircases[id - 1];
-                if staircase.begin != rank {
-                    next_front.insert((rank - 1, id));
-                } else if let Some(feeder_id) = staircase.feeding_staircase {
-                    next_front.insert((rank, feeder_id));
+            for step_size in 1..=max_step_size {
+                if front.is_empty() {
+                    break;
                 }
 
-                for (&candidate, returner_ids) in &branches[rank as usize] {
-                    if candidate == id {
-                        for &returner_id in returner_ids {
-                            next_front.insert((rank, returner_id));
+                let mut next_front = HashSet::new();
+
+                for node in front {
+                    let staircase = &staircases[node.staircase_id - 1];
+                    if staircase.end != node.step_rank {
+                        next_front.insert(Node::new(node.staircase_id, node.step_rank + 1));
+                    } else if let Some(return_id) = staircase.return_staircase {
+                        next_front.insert(Node::new(return_id, node.step_rank));
+                    }
+
+                    for (&candidate, feeder_ids) in &branches[node.step_rank as usize] {
+                        if candidate == node.staircase_id {
+                            for &returner_id in feeder_ids {
+                                next_front.insert(Node::new(returner_id, node.step_rank));
+                            }
                         }
                     }
                 }
-            }
 
-            if data.allowed_moves.contains(&step_size) {
-                for &step in &next_front {
-                    predecessors.insert(step);
+                if allowed_moves.contains(&step_size) {
+                    for &step in &next_front {
+                        res.insert(step);
+                    }
                 }
+
+                front = next_front;
             }
-
-            front = next_front;
-        }
-
-        let count = predecessors
-            .iter()
-            .map(|predecessor| memory.get(predecessor).unwrap())
-            .sum();
-        memory.insert((step_rank, staircase_id), count);
-    }
-
-    let max_step_rank = data.staircases[0].end - data.staircases[0].begin;
-    *memory.get(&(max_step_rank, 1)).unwrap()
+            (node, res.into_iter().collect())
+        })
+        .collect()
 }
 
-fn solve_part3(data: &Data) -> i64 {
-    0
+fn allowed_starting_paths(
+    staircases: &[Staircase],
+    allowed_moves: &[StepCount],
+) -> HashMap<Node, PathCount> {
+    let successors = successors(staircases, allowed_moves);
+
+    let mut res = HashMap::new();
+
+    let end_node = Node::new(1, staircases[0].end);
+
+    res.insert(end_node, 1);
+
+    for node in nodes_to_explore(staircases).into_iter().rev().skip(1) {
+        let count = successors
+            .get(&node)
+            .unwrap()
+            .iter()
+            .map(|predecessor| res.get(predecessor).unwrap())
+            .sum();
+        res.insert(node, count);
+    }
+
+    res
+}
+
+fn solve_part2(data: &Data) -> PathCount {
+    let begin_node = Node::new(1, data.staircases[0].begin);
+
+    *allowed_starting_paths(&data.staircases, &data.allowed_moves)
+        .get(&begin_node)
+        .unwrap()
+}
+
+fn solve_part3(data: &Data) -> String {
+    const TARGET_PATH_RANK: PathCount = 100000000000000000000000000000;
+
+    let successors = successors(&data.staircases, &data.allowed_moves);
+    let allowed_paths = allowed_starting_paths(&data.staircases, &data.allowed_moves);
+
+    let begin_node = Node::new(1, data.staircases[0].begin);
+    let end_node = Node::new(1, data.staircases[0].end);
+
+    let target_path_rank = TARGET_PATH_RANK.min(*allowed_paths.get(&begin_node).unwrap());
+
+    let mut path = vec![begin_node];
+    let mut dominated_path_count: PathCount = 0;
+
+    let mut node = *path.last().unwrap();
+    while node != end_node {
+        let (next_node, next_dominated_path_count) = successors[&node]
+            .iter()
+            .zip(
+                successors[&node]
+                    .iter()
+                    .scan(dominated_path_count, |acc, x| {
+                        let res = Some(*acc);
+                        *acc += *allowed_paths.get(x).unwrap();
+                        res
+                    }),
+            )
+            .take_while(|(_, n)| *n < target_path_rank)
+            .last()
+            .unwrap();
+
+        dominated_path_count = next_dominated_path_count;
+        path.push(*next_node);
+        node = *path.last().unwrap();
+    }
+
+    format!(
+        "{}",
+        path.into_iter()
+            .map(|node| format!("{}", node))
+            .collect::<Vec<_>>()
+            .join("-")
+    )
 }
