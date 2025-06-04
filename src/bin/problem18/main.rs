@@ -1,4 +1,7 @@
-use std::{collections::BTreeSet, iter::once};
+use std::{
+    collections::{BTreeMap, BTreeSet, btree_map},
+    iter::once,
+};
 
 fn main() {
     let input = parse_input(include_str!("input.txt"));
@@ -92,6 +95,42 @@ fn safe_successors(position: &Position, time: Time, rules: &[Rule]) -> Vec<Posit
         .collect()
 }
 
+fn hits_sustained(position: &Position, time: Time, rules: &[Rule]) -> usize {
+    if position == &OFFSET {
+        0
+    } else {
+        rules
+            .iter()
+            .filter(|rule| rule.holds(time, position))
+            .count()
+    }
+}
+
+fn successors(position: &Position, time: Time, rules: &[Rule]) -> Vec<(Position, usize)> {
+    (0..3)
+        .flat_map(|i| {
+            [
+                if position[i] > 0 { Some(-1) } else { None },
+                if position[i] + 1 < SIZE[i] {
+                    Some(1)
+                } else {
+                    None
+                },
+            ]
+            .into_iter()
+            .filter_map(move |d| {
+                d.map(|d| {
+                    let mut res = *position;
+                    res[i] = (res[i] as SignedCoord + d) as Coord;
+                    res
+                })
+            })
+        })
+        .chain(once(position).copied())
+        .map(|position| (position, hits_sustained(&position, time + 1, &rules)))
+        .collect()
+}
+
 type Data = Vec<Rule>;
 
 fn parse_input(input: &str) -> Data {
@@ -150,6 +189,8 @@ fn solve_part1(data: &Data) -> usize {
         .sum()
 }
 
+const EXIT: Position = [9 + OFFSET[0], 14 + OFFSET[1], 59 + OFFSET[2], 0 + OFFSET[3]];
+
 fn solve_part2(data: &Data) -> Time {
     const EXIT: Position = [9 + OFFSET[0], 14 + OFFSET[1], 59 + OFFSET[2], 0 + OFFSET[3]];
     let mut front: BTreeSet<_> = once(OFFSET).collect();
@@ -168,6 +209,45 @@ fn solve_part2(data: &Data) -> Time {
     unreachable!()
 }
 
-fn solve_part3(data: &Data) -> i64 {
-    0
+const LIFE: usize = 4;
+
+fn solve_part3(data: &Data) -> Time {
+    let mut front: BTreeMap<_, usize> = once((OFFSET, 0)).collect();
+
+    for time in 0.. {
+        if front.contains_key(&EXIT) {
+            return time;
+        }
+
+        let candidates = front.into_iter().flat_map(|(position, hits)| {
+            successors(&position, time, &data).into_iter().filter_map(
+                move |(new_position, new_hits)| {
+                    let next_hits = hits + new_hits;
+                    if next_hits < LIFE {
+                        Some((new_position, next_hits))
+                    } else {
+                        None
+                    }
+                },
+            )
+        });
+
+        let mut new_front = BTreeMap::new();
+
+        for (candidate, hits) in candidates {
+            match new_front.entry(candidate) {
+                btree_map::Entry::Vacant(vacant_entry) => {
+                    vacant_entry.insert(hits);
+                }
+                btree_map::Entry::Occupied(mut occupied_entry) => {
+                    let current_hits = occupied_entry.get_mut();
+                    *current_hits = hits.min(*current_hits);
+                }
+            }
+        }
+
+        front = new_front;
+    }
+
+    unreachable!()
 }
